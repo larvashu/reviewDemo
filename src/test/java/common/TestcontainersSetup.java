@@ -48,13 +48,9 @@ public abstract class TestcontainersSetup {
 
     private static final AtomicBoolean INITIALISED = new AtomicBoolean(false);
 
-    static {
-        // nic nie robimy – uruchomimy się świadomie przez initOnce()
-    }
-
     /** Jawne wywołanie z pierwszego hooka testów; odpali się tylko raz. */
     public static synchronized void initOnce() {
-        if (INITIALISED.get()) return;     // już gotowe
+        if (INITIALISED.get()) return;
 
         log.info("⏳  Uruchamiam kontenery docker-compose…");
         ENV.start();

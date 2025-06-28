@@ -1,6 +1,5 @@
 package cucumber;
 
-import io.cucumber.junit.platform.engine.Cucumber;
 import org.junit.platform.suite.api.ConfigurationParameter;
 import org.junit.platform.suite.api.IncludeEngines;
 import org.junit.platform.suite.api.SelectClasspathResource;
@@ -15,17 +14,15 @@ import static io.cucumber.junit.platform.engine.Constants.PLUGIN_PROPERTY_NAME;
  * and reporting plugins (including Allure).
  */
 @Suite
-@IncludeEngines("cucumber") // Indicate that this suite runs Cucumber tests
-@SelectClasspathResource("features") // Specify the directory where .feature files are located
+@IncludeEngines("cucumber")
+@SelectClasspathResource("features")
 @ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "cucumber.step")
 @ConfigurationParameter(
         key = PLUGIN_PROPERTY_NAME,
-        value = "pretty," +                                      // Console output
-                "html:target/cucumber-reports/cucumber.html," +  // HTML report
-                "json:target/cucumber-reports/cucumber.json," +  // JSON report (for external tools)
-                "io.qameta.allure.cucumber7jvm.AllureCucumber7Jvm" // Allure integration for Cucumber
+        value = "pretty," +
+                "html:target/cucumber-reports/cucumber.html," +
+                "json:target/cucumber-reports/cucumber.json," +
+                "io.qameta.allure.cucumber7jvm.AllureCucumber7Jvm"
 )
 public class RunCucumberTest {
-    // This class serves as the entry point for JUnit to discover and run Cucumber features.
-    // No code is needed inside the class itself.
 }

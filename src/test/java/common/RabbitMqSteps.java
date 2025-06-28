@@ -16,9 +16,6 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Kroki/asser­cje dla RabbitMQ (E2E).
- */
 public class RabbitMqSteps {
 
     private static final Logger log = LoggerFactory.getLogger(RabbitMqSteps.class);
@@ -39,7 +36,7 @@ public class RabbitMqSteps {
     @Step("RabbitMQ: czyszczę kolejkę '{queueName}'")
     public void purgeQueue() {
         try {
-            rabbitMqClient.clearQueue();           // ← TU jest metoda z Twojego klienta
+            rabbitMqClient.clearQueue();
         } catch (IOException e) {
             throw new RuntimeException("Nie mogę wyczyścić kolejki RabbitMQ", e);
         }
