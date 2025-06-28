@@ -21,7 +21,7 @@ Feature: Order Processing E2E Workflow
     And the message JSON for "<orderId>" should contain totalAmount <expected>
 
     Examples:
-      | orderId                             | amount | currency | expected |
+      | orderId                              | amount | currency | expected |
       | 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d | 150.00 | EUR      | 184.50   |
       | 9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d4c | 75.25  | GBP      | 92.56    |
       | a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d | 0.00   | USD      | 0.00     |
