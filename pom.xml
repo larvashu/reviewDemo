@@ -12,8 +12,7 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <junit.version>5.10.0</junit.version>
-        <testcontainers.version>1.21.2</testcontainers.version>
+        <junit.version>5.10.2</junit.version> <testcontainers.version>1.21.2</testcontainers.version>
         <postgresql.version>42.7.3</postgresql.version>
         <hikari.version>5.1.0</hikari.version>
         <jooq.version>3.19.6</jooq.version>
@@ -25,13 +24,12 @@
         <slf4j.version>2.0.13</slf4j.version>
         <logback.version>1.5.6</logback.version>
         <json-path.version>2.9.0</json-path.version>
+        <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
         <cucumber.version>7.18.0</cucumber.version>
         <cucumber.messages.version>24.1.0</cucumber.messages.version>
-        <spring-boot.version>3.2.5</spring-boot.version>
-        <spring-rabbit.version>3.1.4</spring-rabbit.version>
     </properties>
-    <dependencies>
 
+    <dependencies>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
@@ -53,13 +51,37 @@
         <dependency>
             <groupId>org.junit.platform</groupId>
             <artifactId>junit-platform-suite</artifactId>
-            <version>1.10.0</version>
+            <version>1.10.2</version> <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.cucumber</groupId>
+            <artifactId>cucumber-java</artifactId>
+            <version>${cucumber.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>io.cucumber</groupId>
             <artifactId>cucumber-junit-platform-engine</artifactId>
             <version>${cucumber.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.cucumber</groupId>
+            <artifactId>cucumber-core</artifactId>
+            <version>${cucumber.version}</version>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.cucumber</groupId>
+                    <artifactId>messages</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>io.cucumber</groupId>
+            <artifactId>messages</artifactId>
+            <version>${cucumber.messages.version}</version>
             <scope>test</scope>
         </dependency>
 
@@ -114,7 +136,6 @@
             <artifactId>jooq-codegen</artifactId>
             <version>${jooq.version}</version>
         </dependency>
-
         <dependency>
             <groupId>com.rabbitmq</groupId>
             <artifactId>amqp-client</artifactId>
@@ -127,7 +148,6 @@
             <version>${assertj.version}</version>
             <scope>test</scope>
         </dependency>
-
         <dependency>
             <groupId>com.github.javafaker</groupId>
             <artifactId>javafaker</artifactId>
@@ -138,6 +158,7 @@
             <artifactId>gson</artifactId>
             <version>2.11.0</version>
         </dependency>
+
         <dependency>
             <groupId>io.qameta.allure</groupId>
             <artifactId>allure-junit5</artifactId>
@@ -185,38 +206,6 @@
             <version>${json-path.version}</version>
             <scope>test</scope>
         </dependency>
-
-        <dependency>
-            <groupId>io.cucumber</groupId>
-            <artifactId>cucumber-java</artifactId>
-            <version>${cucumber.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.cucumber</groupId>
-            <artifactId>cucumber-junit-platform-engine</artifactId>
-            <version>${cucumber.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.cucumber</groupId>
-            <artifactId>cucumber-core</artifactId>
-            <version>${cucumber.version}</version>
-            <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>io.cucumber</groupId>
-                    <artifactId>messages</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
-        <dependency>
-            <groupId>io.cucumber</groupId>
-            <artifactId>messages</artifactId>
-            <version>${cucumber.messages.version}</version>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 
     <build>
@@ -228,25 +217,6 @@
                 <configuration>
                     <source>${maven.compiler.source}</source>
                     <target>${maven.compiler.target}</target>
-                </configuration>
-            </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.5</version>
-                <configuration>
-                    <testFailureIgnore>false</testFailureIgnore>
-                    <systemPropertyVariables>
-                        <allure.results.directory>${project.basedir}/allure-results</allure.results.directory>
-                    </systemPropertyVariables>
-                    <properties>
-<!--                        <configurationParameters>-->
-<!--                            cucumber.plugin=pretty,html:target/cucumber-reports/cucumber.html,json:target/cucumber-reports/cucumber.json,io.qameta.allure.cucumber7jvm.AllureCucumber7Jvm-->
-<!--                            cucumber.features=src/test/resources/features-->
-<!--                            cucumber.glue=app.cucumber.stepdefs-->
-<!--                        </configurationParameters>-->
-                    </properties>
                 </configuration>
             </plugin>
 
@@ -288,6 +258,11 @@
                                             <key>org.jooq.meta.extensions.ddl.DDLDatabase.dialect</key>
                                             <value>POSTGRES</value>
                                         </property>
+                                        <property>
+                                            <key>nameCase</key>
+                                            <value>lower</value>
+                                        </property>
+
                                     </properties>
                                 </database>
                                 <target>
@@ -311,4 +286,55 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>cucumber</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>${maven-surefire-plugin.version}</version>
+                        <configuration>
+                            <properties>
+                                <configurationParameters>
+                                    cucumber.features>src/test/resources/features
+                                    cucumber.glue>cucumber.step
+                                    cucumber.plugin>pretty,html:target/cucumber-reports/cucumber.html,json:target/cucumber-reports/cucumber.json,io.qameta.allure.cucumber7jvm.AllureCucumber7Jvm
+                                </configurationParameters>
+                            </properties>
+                            <excludes>
+                                <exclude>**/OrderProcessingTest.java</exclude>
+                            </excludes>
+                            <includes>
+                                <include>**/RunCucumberTest.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>junit</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>${maven-surefire-plugin.version}</version>
+                        <configuration>
+                            <includes>
+                                <include>**/OrderProcessingTest.java</include>
+                            </includes>
+                            <excludes>
+                                <exclude>**/RunCucumberTest.java</exclude>
+                            </excludes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

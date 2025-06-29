@@ -26,12 +26,10 @@ public class OrderWorkerMain {
     private static DataSource currentDataSource;
 
     public static void main(String[] args) throws Exception {
-        // Load application properties
         Properties appProps = loadApplicationProperties(CONFIG_FILE_NAME);
         log.info("Loaded properties from {}:", CONFIG_FILE_NAME);
         appProps.forEach((k, v) -> log.info("  {} = {}", k, v));
 
-        // --- Database Setup ---
         String dbHost = appProps.getProperty("db.host");
         String dbPort = appProps.getProperty("db.port");
         String dbName = appProps.getProperty("db.name");
@@ -54,7 +52,6 @@ public class OrderWorkerMain {
         OrderRepository repo = new OrderRepository(dslContext);
         log.info("OrderWorkerMain: Połączono z bazą danych i załadowano schemat: {}", dbUrl);
 
-        // --- RabbitMQ Setup ---
         String rmqHost = appProps.getProperty("rabbitmq.host");
         int rmqPort = Integer.parseInt(appProps.getProperty("rabbitmq.port"));
         String rmqUser = appProps.getProperty("rabbitmq.user");
@@ -65,7 +62,6 @@ public class OrderWorkerMain {
         mq.connectAndDeclareQueue(queueName);
         log.info("OrderWorkerMain: Połączono z RabbitMQ: {}:{} dla kolejki {}", rmqHost, rmqPort, queueName);
 
-        // --- Worker Setup and Start ---
         OrderWorker worker = new OrderWorker(repo, mq, queueName);
         Thread t = new Thread(worker, "order-worker");
         t.start();

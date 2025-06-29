@@ -15,6 +15,9 @@ mvn clean test -Pcucumber
 
 Po wykonaniu testów, wszystkie serwisy są automatycznie zamykane.
 
+Wyświetlenie raportu:
+
+start target/cucumber-reports/cucumber.html
 
 2. Testy na czystym jUnit (preProd-like)
 

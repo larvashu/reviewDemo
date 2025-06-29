@@ -5,6 +5,11 @@ services:
       POSTGRES_DB: testdb
       POSTGRES_USER: testuser
       POSTGRES_PASSWORD: testpass
+    ports:
+      - "5432:5432" # Mapowanie portu Postgresa z kontenera na hosta
 
   rabbitmq:
     image: rabbitmq:3.12-management-alpine
+    ports:
+      - "5672:5672" # Mapowanie portu RabbitMQ z kontenera na hosta
+      - "15672:15672" # Opcjonalnie: port dla interfejsu zarządzania RabbitMQ
