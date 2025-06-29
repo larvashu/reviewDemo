@@ -62,6 +62,13 @@ public class OrderRepository {
                 .execute();
     }
 
+    public long getUnprocessedCount() {
+        return dsl.selectCount()
+                .from(ORDERS)
+                .where(ORDERS.VAT_AMOUNT.isNull())
+                .fetchOne(0, Long.class);
+    }
+
     /* ---------- CLEANUP ---------- */
 
     public void truncateOrdersTable() {

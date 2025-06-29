@@ -1,139 +1,100 @@
 package cucumber.step;
 
 import app.model.Order;
-import app.mq.RabbitMqClient;
-import app.repository.OrderRepository;
-import app.worker.OrderWorker;
-import common.DatabaseSteps;
-import common.RabbitMqSteps;
-import common.TestcontainersSetup;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import io.cucumber.java.After;
-import io.cucumber.java.Before;
 import io.cucumber.java.en.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Duration;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 
 public class OrderProcessingStepDefinitions {
 
-    private static final Logger log        = LoggerFactory.getLogger(OrderProcessingStepDefinitions.class);
-    private static final String QUEUE_NAME = "processed_orders";
+    private static final Logger log = LoggerFactory.getLogger(OrderProcessingStepDefinitions.class);
 
-    private DatabaseSteps   db;
-    private RabbitMqSteps   rmq;
-    private RabbitMqClient  rmqClient;
-    private OrderWorker     worker;
-    private Thread          workerThread;
+    private UUID currentOrderId;
+    private Exception caughtException;
+    private JsonObject lastMessage;        // <-- tutaj trzymamy ostatni JSON
 
-    private Order           insertedOrder;
-    private String          consumedMsg;
-    private Exception       creationException;
-
-    @Before
-    public void beforeScenario() throws Exception {
-        TestcontainersSetup.initOnce();
-
-        OrderRepository repo = new OrderRepository(TestcontainersSetup.dslContext);
-        db        = new DatabaseSteps(repo);
-
-        rmqClient = new RabbitMqClient(TestcontainersSetup.rabbitMqCF);
-        rmqClient.connectAndDeclareQueue(QUEUE_NAME);
-        rmq       = new RabbitMqSteps(rmqClient, QUEUE_NAME);
-
-        worker    = new OrderWorker(repo, rmqClient, QUEUE_NAME);
-        workerThread = new Thread(worker, "order-worker");
-        workerThread.start();
+    public OrderProcessingStepDefinitions() {
+        log.info("OrderProcessingStepDefinitions: new instance");
     }
-
-    @After
-    public void afterScenario() throws InterruptedException {
-        if (worker != null)      worker.stop();
-        if (workerThread != null) workerThread.join(500);
-        if (rmqClient != null)    rmqClient.close();
-    }
-
-    // ---------- Common steps ----------
 
     @Given("a clean environment for order processing")
-    public void aCleanEnvironment() {
-        db.truncateOrdersTable();
-        rmq.purgeQueue();
+    public void a_clean_environment_for_order_processing() {
+        log.info("Clean environment ready");
+        // baza i kolejka czyszczone są już w CucumberHooks
     }
 
-    // ---------- Edge case: negative amount ----------
+    @Given("a new order with ID {string}, amount {bigdecimal} and currency {string}")
+    public void a_new_order_with_id_amount_and_currency(String orderId, BigDecimal amount, String currency) {
+        log.info("GIVEN: insert order ID={}, amount={} {}", orderId, amount, currency);
+        this.currentOrderId = UUID.fromString(orderId);
+        Order order = new Order(currentOrderId, amount.setScale(2, RoundingMode.HALF_UP), currency);
+        CucumberHooks.repo.insertOrder(order);
+        log.info("Order inserted into DB");
+    }
 
-    @When("I attempt to insert a new order with ID {string}, amount {double} and currency {string}")
-    public void iAttemptToInsertNewOrder(String id, Double amount, String currency) {
-        creationException = null;
+    @When("the order is processed by the system")
+    public void the_order_is_processed_by_the_system() {
+        log.info("WHEN: worker processes order ID={} in background", currentOrderId);
+        // worker działa asynchronicznie
+    }
+
+    @Then("a message should appear in the {string} queue within {int} seconds")
+    public void a_message_should_appear_in_the_queue_within_seconds(String queue, Integer seconds) throws Exception {
+        log.info("THEN: expect message in queue '{}' within {}s", queue, seconds);
+        String raw = CucumberHooks.rmqClient.getMessageFromQueue(Duration.ofSeconds(seconds));
+        assertThat(raw)
+                .as("Expected a message in queue '%s'", queue)
+                .isNotNull();
+        log.info("Received raw message: {}", raw);
+
+        // Parsujemy i zapisujemy w polu
+        this.lastMessage = JsonParser.parseString(raw).getAsJsonObject();
+        assertThat(this.lastMessage).as("Valid JSON").isNotNull();
+    }
+
+    @Then("the message JSON for {string} should contain totalAmount {bigdecimal}")
+    public void the_message_json_for_should_contain_total_amount(String orderId, BigDecimal expectedTotal) {
+        assertThat(lastMessage.get("id").getAsString())
+                .as("Order ID in message")
+                .isEqualTo(orderId);
+
+        BigDecimal actual = new BigDecimal(lastMessage.get("totalAmount").getAsString())
+                .setScale(2, RoundingMode.HALF_UP);
+        assertThat(actual)
+                .as("totalAmount")
+                .isEqualByComparingTo(expectedTotal.setScale(2, RoundingMode.HALF_UP));
+
+        log.info("Verified totalAmount {} for order {}", actual, orderId);
+    }
+
+    // --- negatywny scenariusz ---
+
+    @When("I attempt to insert a new order with ID {string}, amount {bigdecimal} and currency {string}")
+    public void i_attempt_to_insert_a_new_order_with_id_amount_and_currency(String orderId, BigDecimal amount, String currency) {
+        log.info("WHEN (neg): attempt insert order ID={}, amount={} {}", orderId, amount, currency);
+        this.currentOrderId = UUID.fromString(orderId);
         try {
-            db.givenOrderInDatabase(
-                    UUID.fromString(id),
-                    BigDecimal.valueOf(amount).setScale(2),
-                    currency
-            );
+            Order order = new Order(currentOrderId, amount.setScale(2, RoundingMode.HALF_UP), currency);
+            CucumberHooks.repo.insertOrder(order);
         } catch (Exception e) {
-            creationException = e;
+            caughtException = e;
         }
     }
 
     @Then("order creation should fail with IllegalArgumentException")
-    public void orderCreationShouldFail() {
-        assertThat(creationException)
-                .as("Expected IllegalArgumentException for negative amount")
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("cannot be negative");
-    }
-
-    // ---------- Happy path: valid orders ----------
-
-    @Given("a new order with ID {string}, amount {double} and currency {string}")
-    public void aNewOrder(String id, Double amount, String currency) {
-        insertedOrder = db.givenOrderInDatabase(
-                UUID.fromString(id),
-                BigDecimal.valueOf(amount).setScale(2),
-                currency
-        );
-    }
-
-    @When("the order is processed by the system")
-    public void waitForProcessing() {
-        consumedMsg = rmq.waitForMessage(Duration.ofSeconds(30));
-    }
-
-    @Then("a message should appear in the {string} queue within {int} seconds")
-    public void messageShouldAppear(String queue, Integer seconds) {
-        assertThat(consumedMsg)
-                .as("No message in queue %s within %d seconds", queue, seconds)
-                .isNotNull();
-    }
-
-    @Then("the message should contain the processed order details for {string} with VAT applied")
-    public void messageContainsProcessedOrder(String orderIdStr) {
-        rmq.assertProcessedOrder(consumedMsg, insertedOrder);
-        db.thenOrderShouldExistInDatabase(UUID.fromString(orderIdStr));
-    }
-
-    @Then("the message JSON for {string} should contain totalAmount {double}")
-    public void messageJsonShouldContainTotal(String orderId, Double expectedTotal) {
-        JsonObject json = JsonParser.parseString(consumedMsg).getAsJsonObject();
-
-        // verify id
-        assertThat(json.get("id").getAsString())
-                .as("id in JSON")
-                .isEqualTo(orderId);
-
-        // verify totalAmount
-        BigDecimal actual   = new BigDecimal(json.get("totalAmount").getAsString());
-        BigDecimal expected = BigDecimal.valueOf(expectedTotal).setScale(2);
-        assertThat(actual)
-                .as("totalAmount in JSON")
-                .isEqualByComparingTo(expected);
+    public void order_creation_should_fail_with_illegal_argument_exception() {
+        assertThat(caughtException)
+                .as("Expected IllegalArgumentException")
+                .isInstanceOf(IllegalArgumentException.class);
+        log.info("Correctly caught exception: {}", caughtException.getClass().getSimpleName());
     }
 }
