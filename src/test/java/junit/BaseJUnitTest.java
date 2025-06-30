@@ -5,10 +5,7 @@ import app.repository.OrderRepository;
 import common.DatabaseSteps; // Import nowej klasy
 import common.RabbitMqSteps; // Import nowej klasy
 import env.ManualEnvironment;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,17 +14,13 @@ import java.time.Duration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public abstract class BaseIntegrationTest {
+public abstract class BaseJUnitTest {
 
-    private static final Logger log = LoggerFactory.getLogger(BaseIntegrationTest.class);
-
-    // Dostęp do zasobów dla klas potomnych
+    private static final Logger log = LoggerFactory.getLogger(BaseJUnitTest.class);
     protected OrderRepository repo; // Nadal potrzebne do inicjalizacji DatabaseSteps
     protected RabbitMqClient rmqClient; // Nadal potrzebne do inicjalizacji RabbitMqSteps
     protected String queueName;
     protected Duration defaultMessageTimeout = Duration.ofSeconds(30);
-
-    // Nowe pola dla klas kroków
     protected DatabaseSteps dbSteps;
     protected RabbitMqSteps mqSteps;
 
@@ -36,17 +29,14 @@ public abstract class BaseIntegrationTest {
     @BeforeAll
     static void setupManualTestEnvironment() throws Exception {
         log.info("--- BaseIntegrationTest @BeforeAll (static): Rozpoczynam inicjalizację dedykowanego środowiska MANUALNEGO ---");
-
         manualEnvironment = new ManualEnvironment();
         manualEnvironment.initOnce();
-
         log.info("--- BaseIntegrationTest @BeforeAll (static): Środowisko MANUALNE zostało zainicjalizowane. ---");
     }
 
     @BeforeAll
     void setupConnectionsAndStepsForManualEnv() throws Exception { // Zmieniona nazwa metody
         log.info("--- BaseIntegrationTest @BeforeAll: Ustawiam połączenia i inicjalizuję klasy kroków z środowiska MANUALNEGO ---");
-
         // Inicjalizacja repo i rmqClient
         repo = new OrderRepository(manualEnvironment.getDslContext());
         rmqClient = new RabbitMqClient(manualEnvironment.getRabbitMqConnectionFactory());
@@ -62,24 +52,11 @@ public abstract class BaseIntegrationTest {
         log.info("--- BaseIntegrationTest @BeforeAll: Klasy DatabaseSteps i RabbitMqSteps zainicjalizowane. ---");
     }
 
-    @BeforeEach
-    void cleanBeforeEachTest() throws Exception {
-        log.info("--- BaseIntegrationTest @BeforeEach: Rozpoczynam czyszczenie środowiska przed testem ---");
-
-        assertThat(dbSteps).as("DatabaseSteps powinno być zainicjalizowane").isNotNull();
-        assertThat(mqSteps).as("RabbitMqSteps powinno być zainicjalizowane").isNotNull();
-
-        // Używamy metod z DatabaseSteps i RabbitMqSteps do czyszczenia
-        dbSteps.truncateOrdersTable();
-        mqSteps.purgeQueue();
-
-        log.info("--- BaseIntegrationTest @BeforeEach: Środowisko wyczyszczone pomyślnie. ---");
-    }
 
     @AfterAll
     void teardownConnections() throws Exception {
         log.info("--- BaseIntegrationTest @AfterAll: Rozpoczynam zamykanie połączeń z środowiska MANUALNEGO ---");
-        if (rmqClient != null) { // Nadal zamykamy rmqClient bezpośrednio, bo to on zarządza Connection
+        if (rmqClient != null) {
             log.info("--- BaseIntegrationTest @AfterAll: Zamykam połączenie z RabbitMQ ---");
             rmqClient.close();
         }

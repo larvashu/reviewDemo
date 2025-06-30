@@ -1,7 +1,8 @@
-package common;
+package env;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import common.AbstractTestEnvironment;
 import org.jooq.SQLDialect;
 import org.jooq.impl.DSL;
 
@@ -48,6 +49,6 @@ public class ManualEnvironment extends AbstractTestEnvironment {
 
     @Override
     protected void doShutdown() {
-        // Brak specyficznej logiki zamykania dla ManualEnvironment ponad to, co obsługuje AbstractTestEnvironment
+        //wylaczanie manualne tak cyz siak
     }
 }

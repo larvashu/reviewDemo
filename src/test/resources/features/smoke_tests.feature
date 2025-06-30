@@ -1,4 +1,4 @@
-Feature: Order Processing Smoke Tests
+Feature: Smoke Tests
 
   As a developer or operator
   I want to verify that all core components (database, message queue, worker) are up and running
@@ -12,7 +12,7 @@ Feature: Order Processing Smoke Tests
   @Smoke
   Scenario: RabbitMQ is reachable and queue exists
     Given RabbitMQ is up
-    Then I can publish and consume a dummy message on "processed_orders"
+    Then I can publish and consume a dummy message on "order_queue"
 
   @Smoke
   Scenario: Worker can start and stop cleanly
@@ -20,3 +20,4 @@ Feature: Order Processing Smoke Tests
     Then worker thread is alive
     When I stop the worker
     Then worker thread is not alive
+##Tu dalbym testy sprawdzania wersji itd.

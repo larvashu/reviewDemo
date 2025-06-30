@@ -1,77 +1,95 @@
 package app.repository;
 
+import app.jooq.tables.Orders;
 import app.model.Order;
+import app.model.ProcessedOrder;
 import org.jooq.DSLContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.jooq.Record;
+import org.jooq.RecordMapper;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
 import static app.jooq.tables.Orders.ORDERS;
+import static org.jooq.impl.DSL.*;
 
-/**
- * DAO dla tabeli orders.
- */
 public class OrderRepository {
 
-    private static final Logger log = LoggerFactory.getLogger(OrderRepository.class);
     private final DSLContext dsl;
 
     public OrderRepository(DSLContext dsl) {
         this.dsl = dsl;
     }
 
-    /* ---------- INSERT ---------- */
-
     public void insertOrder(Order order) {
         dsl.insertInto(ORDERS)
-                .set(ORDERS.ID,        order.id())
-                .set(ORDERS.AMOUNT,    order.amount())
-                .set(ORDERS.CURRENCY,  order.currency())
-                // kolumny VAT są null – wypełni je worker
+                .set(ORDERS.ID, order.id())
+                .set(ORDERS.AMOUNT, order.amount())
+                .set(ORDERS.CURRENCY, order.currency())
                 .execute();
     }
 
-    /* ---------- SELECT ---------- */
-
-    public Order findOrderById(UUID id) {
+    public ProcessedOrder findOrderById(UUID id) {
         return dsl.selectFrom(ORDERS)
                 .where(ORDERS.ID.eq(id))
-                .fetchOptional(r -> new Order(
-                        r.getId(),
-                        r.getAmount(),
-                        r.getCurrency()))
-                .orElse(null);
+                .fetchOne(new RecordMapper<Record, ProcessedOrder>() {
+                    @Override
+                    public ProcessedOrder map(Record record) {
+                        if (record == null) {
+                            return null;
+                        }
+                        return new ProcessedOrder(
+                                record.get(ORDERS.ID),
+                                record.get(ORDERS.AMOUNT),
+                                record.get(ORDERS.CURRENCY),
+                                record.get(ORDERS.VAT_AMOUNT),
+                                record.get(ORDERS.TOTAL_AMOUNT)
+                        );
+                    }
+                });
     }
 
-    /** NOWA – zwraca rekordy jeszcze nieprzetworzone (VAT_NULL) */
+    public int getUnprocessedCount() {
+        return dsl.select(count())
+                .from(ORDERS)
+                .where(ORDERS.VAT_AMOUNT.isNull()) // Zakładamy, że null vat_amount oznacza nieprzetworzone
+                .fetchOne(0, int.class);
+    }
+
     public List<Order> findUnprocessed() {
         return dsl.selectFrom(ORDERS)
                 .where(ORDERS.VAT_AMOUNT.isNull())
-                .fetch(r -> new Order(r.getId(), r.getAmount(), r.getCurrency()));
+                .limit(10)
+                .fetch(new RecordMapper<Record, Order>() {
+                    @Override
+                    public Order map(Record record) {
+                        return new Order(
+                                record.get(ORDERS.ID),
+                                record.get(ORDERS.AMOUNT),
+                                record.get(ORDERS.CURRENCY)
+                        );
+                    }
+                });
     }
-
-    /** NOWA – zapisuje obliczony VAT + total */
-    public void markProcessed(UUID id, BigDecimal vat, BigDecimal total) {
-        dsl.update(ORDERS)
-                .set(ORDERS.VAT_AMOUNT,   vat)
-                .set(ORDERS.TOTAL_AMOUNT, total)
-                .where(ORDERS.ID.eq(id))
-                .execute();
-    }
-
-    public long getUnprocessedCount() {
-        return dsl.selectCount()
-                .from(ORDERS)
-                .where(ORDERS.VAT_AMOUNT.isNull())
-                .fetchOne(0, Long.class);
-    }
-
-    /* ---------- CLEANUP ---------- */
 
     public void truncateOrdersTable() {
         dsl.truncate(ORDERS).restartIdentity().cascade().execute();
+    }
+
+    public void updateOrderWithProcessedData(ProcessedOrder processedOrder) {
+        dsl.update(ORDERS)
+                .set(ORDERS.VAT_AMOUNT, processedOrder.vatAmount())
+                .set(ORDERS.TOTAL_AMOUNT, processedOrder.totalAmount())
+                .where(ORDERS.ID.eq(processedOrder.id()))
+                .execute();
+    }
+
+    public void deleteOrdersByIds(List<String> orderIds) {
+        if (orderIds == null || orderIds.isEmpty()) {
+            return;
+        }
+        dsl.deleteFrom(Orders.ORDERS)
+                .where(Orders.ORDERS.ID.in(orderIds))
+                .execute();
     }
 }

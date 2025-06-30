@@ -1,4 +1,4 @@
-package cucumber;
+package env;
 
 import common.AbstractTestEnvironment;
 import com.zaxxer.hikari.HikariConfig;

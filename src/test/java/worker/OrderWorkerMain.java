@@ -45,7 +45,6 @@ public class OrderWorkerMain {
         hc.setPassword(dbPass);
         currentDataSource = new HikariDataSource(hc);
 
-        // Załaduj schemat bazy z AbstractTestEnvironment
         AbstractTestEnvironment.applySchema(currentDataSource);
 
         DSLContext dslContext = DSL.using(currentDataSource, SQLDialect.POSTGRES);

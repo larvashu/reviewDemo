@@ -1,4 +1,3 @@
-// src/main/java/common/AbstractTestEnvironment.java
 package common;
 
 import com.rabbitmq.client.ConnectionFactory;
@@ -25,7 +24,6 @@ public abstract class AbstractTestEnvironment {
     protected Properties testProperties;
     protected final AtomicBoolean INITIALISED = new AtomicBoolean(false);
 
-    // Publiczne gettery
     public DataSource getDataSource() { return dataSourceInstance; }
     public DSLContext getDslContext() { return dslContextInstance; }
     public ConnectionFactory getRabbitMqConnectionFactory() { return rabbitMqCFInstance; }
@@ -79,7 +77,6 @@ public abstract class AbstractTestEnvironment {
             stmt.execute(new String(sqlBytes, StandardCharsets.UTF_8));
             logger.info("🗄️  Załadowano schemat bazy (V1).");
 
-            // --- DODAJ TEN FRAGMENT KODU ---
             try (var checkStmt = conn.createStatement()) {
                 var rs = checkStmt.executeQuery("SELECT to_regclass('public.\"ORDERS\"');"); // Sprawdź, czy tabela istnieje w schemacie public
                 if (rs.next() && rs.getObject(1) != null) {
@@ -89,12 +86,12 @@ public abstract class AbstractTestEnvironment {
                     throw new RuntimeException("Tabela \"ORDERS\" nie została utworzona poprawnie.");
                 }
             }
-            // --- KONIEC DODATKOWEGO FRAGMENTU ---
 
         } catch (IOException | SQLException e) {
             throw new RuntimeException("Błąd przy ładowaniu schematu DB", e);
         }
     }
+
     protected Properties loadProperties(String fileName) {
         Properties props = new Properties();
         try (InputStream input = getClass().getClassLoader().getResourceAsStream(fileName)) {

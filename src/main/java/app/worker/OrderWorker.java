@@ -1,82 +1,110 @@
-package app.worker; // Upewnij się, że to jest app.worker, nie worker
+package app.worker;
 
 import app.model.Order;
 import app.model.ProcessedOrder;
 import app.mq.RabbitMqClient;
 import app.repository.OrderRepository;
-import com.google.gson.Gson;
-import org.slf4j.Logger; // Dodaj import Logger
-import org.slf4j.LoggerFactory; // Dodaj import LoggerFactory
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 
 public class OrderWorker implements Runnable {
 
-    private static final Logger log = LoggerFactory.getLogger(OrderWorker.class); // Inicjalizacja loggera
+    private static final Logger log = LoggerFactory.getLogger(OrderWorker.class);
 
-    private static final BigDecimal VAT = new BigDecimal("0.23");
+    private final OrderRepository orderRepository;
+    private final RabbitMqClient rabbitMqClient;
+    private final String          queueName;
 
-    private final OrderRepository repo;
-    private final RabbitMqClient  mq;
-    private final Gson gson = new Gson();
-    private final String queue;
     private volatile boolean running = true;
 
-    public OrderWorker(OrderRepository repo,
-                       RabbitMqClient mq,
-                       String queue) {
-        this.repo   = repo;
-        this.mq     = mq;
-        this.queue  = queue;
-        log.info("OrderWorker: Inicjalizacja workera dla kolejki '{}'", queue);
+    private static final BigDecimal VAT_RATE = new BigDecimal("0.23");
+    private static final int        SCALE    = 2;
+
+    public OrderWorker(OrderRepository orderRepository, RabbitMqClient rabbitMqClient, String queueName) {
+        this.orderRepository = orderRepository;
+        this.rabbitMqClient = rabbitMqClient;
+        this.queueName = queueName;
     }
 
-    @Override public void run() {
-        log.info("OrderWorker: Uruchamiam pętlę przetwarzania zamówień...");
+    @Override
+    public void run() {
+        log.info("OrderWorker started...");
         while (running) {
-            // Logujemy, ile zamówień zostało znalezionych do przetworzenia
-            long unprocessedCount = repo.getUnprocessedCount(); // Załóżmy, że repozytorium ma taką metodę
-            if (unprocessedCount > 0) {
-                log.info("OrderWorker: Znaleziono {} nieprzetworzonych zamówień.", unprocessedCount);
-            }
-            repo.findUnprocessed().forEach(this::process);
             try {
-                Thread.sleep(200);
+                int unprocessedCount = orderRepository.getUnprocessedCount();
+                if (unprocessedCount > 0) {
+                    log.info("Found {} unprocessed orders. Processing...", unprocessedCount);
+                    List<Order> unprocessedOrders = orderRepository.findUnprocessed();
+
+                    for (Order order : unprocessedOrders) {
+                        processOrder(order);
+                    }
+                } else {
+                    Thread.sleep(5000);
+                }
             } catch (InterruptedException e) {
-                log.warn("OrderWorker: Wątek przetwarzania przerwany podczas snu.", e);
-                Thread.currentThread().interrupt(); // Przywracamy status przerwania
-                running = false; // Zatrzymujemy pętlę
+                Thread.currentThread().interrupt();
+                log.warn("OrderWorker thread interrupted. Shutting down.");
+                running = false;
+            } catch (Exception e) {
+                log.error("Error in OrderWorker: {}", e.getMessage(), e);
+                try {
+                    Thread.sleep(10000);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    running = false;
+                }
             }
         }
-        log.info("OrderWorker: Pętla przetwarzania zamówień zakończona.");
+        log.info("OrderWorker stopped.");
     }
 
-    private void process(Order o) {
-        log.info("OrderWorker: Rozpoczynam przetwarzanie zamówienia ID: {}, Kwota: {} {}", o.id(), o.amount(), o.currency());
-
-        BigDecimal vat   = o.amount().multiply(VAT).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal total = o.amount().add(vat);
-
-        repo.markProcessed(o.id(), vat, total);
-        log.info("OrderWorker: Zamówienie ID: {} przetworzone w bazie danych. VAT: {}, Total: {}", o.id(), vat, total);
-
-        ProcessedOrder po = new ProcessedOrder(
-                o.id(), o.amount(), o.currency(), vat, total);
-
+    private void processOrder(Order order) {
+        log.info("Processing order: {}", order.id());
         try {
-            String json = gson.toJson(po);
-            mq.publishMessage("", queue, json);
-            log.info("OrderWorker: Przetworzona wiadomość dla zamówienia ID: {} opublikowana w kolejce '{}': {}", o.id(), queue, json);
-        } catch (IOException ex) {
-            log.error("OrderWorker: Błąd podczas publikowania wiadomości dla zamówienia ID: {} w kolejce '{}'", o.id(), queue, ex);
-            throw new RuntimeException(ex); // Nadal rzucamy, aby wskazać błąd krytyczny
+            BigDecimal vatAmount = order.amount().multiply(VAT_RATE).setScale(SCALE, RoundingMode.HALF_UP);
+            BigDecimal totalAmount = order.amount().add(vatAmount).setScale(SCALE, RoundingMode.HALF_UP);
+
+            ProcessedOrder processedOrder = new ProcessedOrder(
+                    order.id(),
+                    order.amount(),
+                    order.currency(),
+                    vatAmount,
+                    totalAmount
+            );
+
+            orderRepository.updateOrderWithProcessedData(processedOrder);
+            log.info("Order {} updated in DB with VAT: {} and Total: {}.", order.id(), vatAmount, totalAmount);
+
+            String message = buildRabbitMqMessage(processedOrder);
+            rabbitMqClient.publishMessage("", queueName, message);
+            log.info("Order {} message published to RabbitMQ.", order.id());
+
+        } catch (IOException e) {
+            log.error("Failed to publish message for order {}: {}", order.id(), e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("Failed to process order {}: {}", order.id(), e.getMessage(), e);
         }
+    }
+
+    private String buildRabbitMqMessage(ProcessedOrder processedOrder) {
+        return String.format(
+                "{\"id\":\"%s\",\"originalAmount\":%s,\"currency\":\"%s\",\"vatAmount\":%s,\"totalAmount\":%s}",
+                processedOrder.id(),
+                processedOrder.originalAmount().toPlainString(), // ZMIANA TUTAJ
+                processedOrder.currency(),
+                processedOrder.vatAmount().toPlainString(),     // ZMIANA TUTAJ
+                processedOrder.totalAmount().toPlainString()    // ZMIANA TUTAJ
+        );
     }
 
     public void stop() {
-        log.info("OrderWorker: Otrzymano sygnał zatrzymania. Worker zakończy działanie.");
+        log.info("Stopping OrderWorker...");
         running = false;
     }
 }

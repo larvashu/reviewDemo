@@ -12,26 +12,27 @@ import io.cucumber.java.Scenario;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import common.DatabaseSteps; // Import nowej klasy
-import common.RabbitMqSteps; // Import nowej klasy
+import common.DatabaseSteps;
+import common.RabbitMqSteps;
 
-import static app.jooq.Tables.ORDERS;
 
-public class CucumberHooks {
+// Klasa BaseCucumberTest pozostaje jako główna konfiguracja i baza
+public class BaseCucumberTest {
 
-    private static final Logger log = LoggerFactory.getLogger(CucumberHooks.class);
+    private static final Logger log = LoggerFactory.getLogger(BaseCucumberTest.class);
 
-    // Te pola nadal muszą być, bo to na nich bazują nasze klasy Steps
     static TestcontainersEnvironment testcontainersEnvironment;
     private static OrderRepository repo;
     static RabbitMqClient rmqClient;
-    private static String queueName;
+    static String queueName;
 
-    // Instancje klas kroków - statyczne, bo Cucumber Hooks są statyczne
-    public static DatabaseSteps dbSteps;
-    public static RabbitMqSteps mqSteps;
+    // Zmieniamy public static na protected static.
+    // Dzięki temu będą dostępne dla klas dziedziczących bez kwalifikowania nazwą klasy (BaseCucumberTest.dbSteps)
+    // ale nadal będą statyczne (czyli jedna instancja dla wszystkich testów).
+    protected static DatabaseSteps dbSteps;
+    protected static RabbitMqSteps mqSteps;
 
-    // Worker i jego wątek
+    //Worker testowy
     public static Thread workerThread;
     public static OrderWorker worker;
 
@@ -39,7 +40,6 @@ public class CucumberHooks {
     @BeforeAll
     public static void setup() throws Exception {
         log.info("--- Cucumber @BeforeAll: Rozpoczynam inicjalizację środowiska testowego (Testcontainers) ---");
-
         testcontainersEnvironment = new TestcontainersEnvironment();
         testcontainersEnvironment.initOnce();
 
@@ -49,7 +49,7 @@ public class CucumberHooks {
 
         // Pobranie nazwy kolejki
         queueName = testcontainersEnvironment.getTestProperties().getProperty("app.queue.name");
-        rmqClient.connectAndDeclareQueue(queueName); // Połącz i zadeklaruj kolejkę raz
+        rmqClient.connectAndDeclareQueue(queueName);
 
         // Inicjalizacja klas kroków z zależnościami
         dbSteps = new DatabaseSteps(repo);
@@ -60,25 +60,20 @@ public class CucumberHooks {
         workerThread = new Thread(worker, "test-order-worker-thread");
         workerThread.start();
         log.info("--- Cucumber @BeforeAll: OrderWorker uruchomiony w wątku testowym. ---");
-
         log.info("--- Cucumber @BeforeAll: Środowisko Testcontainers, repo, rmqClient, klasy kroków oraz worker zainicjalizowane. ---");
     }
 
     @Before
-    public void beforeScenario(Scenario scenario) throws Exception {
+    public void beforeScenario(Scenario scenario) {
         log.info("--- Cucumber @Before: Rozpoczynam scenariusz: {} ---", scenario.getName());
-
-        // Używamy DatabaseSteps i RabbitMqSteps do czyszczenia
-        dbSteps.truncateOrdersTable();
-        mqSteps.purgeQueue();
-
+        dbSteps.truncateOrdersTable(); // Używamy metody truncate z DatabaseSteps
+        mqSteps.purgeQueue(); // Używamy metody purge z RabbitMqSteps
         log.info("--- Cucumber @Before: Środowisko wyczyszczone przed scenariuszem. ---");
     }
 
     @AfterAll
     public static void teardown() {
         log.info("--- Cucumber @AfterAll: Zamykam środowisko testowe (Testcontainers) ---");
-
         if (worker != null) {
             log.info("--- Cucumber @AfterAll: Zatrzymuję OrderWorker. ---");
             worker.stop();
