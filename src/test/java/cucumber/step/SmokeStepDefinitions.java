@@ -17,31 +17,28 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
-/**
- * Klasa implementująca definicje kroków BDD dla scenariuszy "Smoke Tests".
- * Skupia się na weryfikacji dostępności i podstawowej funkcjonalności kluczowych komponentów.
- */
-public class SmokeStepDefinitions extends BaseCucumberTest {
+public class SmokeStepDefinitions {
 
     private static final Logger log = LoggerFactory.getLogger(SmokeStepDefinitions.class);
 
     public SmokeStepDefinitions() {
         log.debug("SmokeStepDefinitions: Utworzono nową instancję kroków dla scenariusza.");
+        assertThat(BaseCucumberTest.dbSteps).as("dbSteps powinno być zainicjalizowane przez BaseCucumberTest").isNotNull();
+        assertThat(BaseCucumberTest.mqSteps).as("mqSteps powinno być zainicjalizowane przez BaseCucumberTest").isNotNull();
     }
 
-    // --- Database Smoke Tests ---
     @Given("Testcontainers PostgreSQL is up")
     public void testcontainersPostgreSQLIsUp() {
         log.info("Krok GIVEN: Weryfikuję, czy Testcontainers PostgreSQL jest uruchomiony.");
-        assertThat(testcontainersEnvironment.getDataSource())
+        assertThat(BaseCucumberTest.testcontainersEnvironment.getDataSource())
                 .as("DataSource powinno być zainicjalizowane")
                 .isNotNull();
-        assertThat(testcontainersEnvironment.getDslContext())
+        assertThat(BaseCucumberTest.testcontainersEnvironment.getDslContext())
                 .as("DSLContext powinno być zainicjalizowane")
                 .isNotNull();
 
         try {
-            testcontainersEnvironment.getDslContext()
+            BaseCucumberTest.testcontainersEnvironment.getDslContext()
                     .selectOne()
                     .fetch();
             log.info("Krok GIVEN: Połączenie z PostgreSQL nawiązane pomyślnie i baza danych odpowiada.");
@@ -60,10 +57,10 @@ public class SmokeStepDefinitions extends BaseCucumberTest {
 
         Order dummyOrderOriginal = new Order(dummyId, dummyAmount, dummyCurrency);
 
-        dbSteps.givenOrderInDatabase(dummyId, dummyAmount, dummyCurrency);
+        BaseCucumberTest.dbSteps.givenOrderInDatabase(dummyId, dummyAmount, dummyCurrency);
         log.info("Dummy record ID: {} wstawiony przez DatabaseSteps.", dummyId);
 
-        ProcessedOrder retrievedOrder = dbSteps.whenFindOrderInDatabase(dummyId);
+        ProcessedOrder retrievedOrder = BaseCucumberTest.dbSteps.whenFindOrderInDatabase(dummyId);
 
         assertThat(retrievedOrder)
                 .as("Powinienem odczytać wstawiony dummy record jako ProcessedOrder")
@@ -84,16 +81,14 @@ public class SmokeStepDefinitions extends BaseCucumberTest {
         log.info("Dummy record ID: {} odczytany pomyślnie jako ProcessedOrder.", dummyId);
     }
 
-    // --- RabbitMQ Smoke Tests ---
     @Given("RabbitMQ is up")
     public void rabbitMQIsUp() {
         log.info("Krok GIVEN: Weryfikuję, czy RabbitMQ jest uruchomiony.");
-        // Używamy bezpośrednio nazwy pola, ponieważ jest protected static
-        assertThat(testcontainersEnvironment.getRabbitMqConnectionFactory())
+        assertThat(BaseCucumberTest.testcontainersEnvironment.getRabbitMqConnectionFactory())
                 .as("ConnectionFactory RabbitMQ powinno być zainicjalizowane")
                 .isNotNull();
 
-        try (Connection conn = testcontainersEnvironment.getRabbitMqConnectionFactory().newConnection();
+        try (Connection conn = BaseCucumberTest.testcontainersEnvironment.getRabbitMqConnectionFactory().newConnection();
              Channel channel = conn.createChannel()) {
             assertThat(channel).isNotNull();
             channel.queueDeclarePassive("order_queue");
@@ -109,27 +104,26 @@ public class SmokeStepDefinitions extends BaseCucumberTest {
         log.info("Krok THEN: Sprawdzam możliwość publikacji i konsumpcji dummy message na kolejce '{}'.", queueName);
         String testMessage = "{\"testId\":\"" + UUID.randomUUID() + "\", \"message\":\"dummy_test\"}";
 
-        rmqClient.publishMessage("", queueName, testMessage);
+        BaseCucumberTest.rmqClient.publishMessage("", queueName, testMessage);
         log.info("Opublikowano dummy message: {}", testMessage);
 
-        String consumedMessage = mqSteps.waitForMessage(Duration.ofSeconds(10));
+        String consumedMessage = BaseCucumberTest.mqSteps.waitForMessage(Duration.ofSeconds(10));
         assertThat(consumedMessage)
                 .as("Powinienem skonsumować dummy message z kolejki")
                 .isEqualTo(testMessage);
         log.info("Skonsumowano dummy message: {}", consumedMessage);
     }
 
-    // --- Worker Smoke Tests ---
     @Given("a running OrderWorker")
     public void aRunningOrderWorker() {
         log.info("Krok GIVEN: Weryfikuję, czy OrderWorker jest uruchomiony.");
-        assertThat(worker)
+        assertThat(BaseCucumberTest.worker)
                 .as("Instancja OrderWorker powinna istnieć.")
                 .isNotNull();
-        assertThat(workerThread)
+        assertThat(BaseCucumberTest.workerThread)
                 .as("Wątek OrderWorker powinien istnieć.")
                 .isNotNull();
-        assertThat(workerThread.isAlive())
+        assertThat(BaseCucumberTest.workerThread.isAlive())
                 .as("Wątek OrderWorker powinien być żywy.")
                 .isTrue();
         log.info("Krok GIVEN: OrderWorker jest uruchomiony i wątek jest żywy.");
@@ -138,7 +132,7 @@ public class SmokeStepDefinitions extends BaseCucumberTest {
     @Then("worker thread is alive")
     public void workerThreadIsAlive() {
         log.info("Krok THEN: Weryfikuję, czy wątek workera jest nadal żywy.");
-        assertThat(workerThread.isAlive())
+        assertThat(BaseCucumberTest.workerThread.isAlive())
                 .as("Wątek workera powinien być żywy.")
                 .isTrue();
         log.info("Krok THEN: Wątek workera jest żywy.");
@@ -147,10 +141,10 @@ public class SmokeStepDefinitions extends BaseCucumberTest {
     @When("I stop the worker")
     public void iStopTheWorker() {
         log.info("Krok WHEN: Zatrzymuję OrderWorker.");
-        worker.stop();
+        BaseCucumberTest.worker.stop();
         try {
-            workerThread.join(5000);
-            if (workerThread.isAlive()) {
+            BaseCucumberTest.workerThread.join(5000);
+            if (BaseCucumberTest.workerThread.isAlive()) {
                 log.warn("Wątek workera nadal żywy po oczekiwaniu na join. Może być problem z czystym zamknięciem.");
             }
         } catch (InterruptedException e) {
@@ -164,8 +158,7 @@ public class SmokeStepDefinitions extends BaseCucumberTest {
     @Then("worker thread is not alive")
     public void workerThreadIsNotAlive() {
         log.info("Krok THEN: Weryfikuję, czy wątek workera nie jest już żywy.");
-        // Używamy bezpośrednio nazwy pola, ponieważ jest protected static
-        assertThat(workerThread.isAlive())
+        assertThat(BaseCucumberTest.workerThread.isAlive())
                 .as("Wątek workera nie powinien być żywy.")
                 .isFalse();
         log.info("Krok THEN: Wątek workera nie jest już żywy.");

@@ -15,7 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import static cucumber.step.BaseCucumberTest.*;
 import static org.assertj.core.api.Assertions.*;
 
 public class OrderProcessingStepDefinitions {
@@ -27,15 +26,16 @@ public class OrderProcessingStepDefinitions {
     private JsonObject lastMessage;
     private List<String> createdOrderIds = new ArrayList<>();
 
-
     public OrderProcessingStepDefinitions() {
         log.info("OrderProcessingStepDefinitions: new instance.");
+        assertThat(BaseCucumberTest.dbSteps).as("dbSteps powinno być zainicjalizowane przez BaseCucumberTest").isNotNull();
+        assertThat(BaseCucumberTest.mqSteps).as("mqSteps powinno być zainicjalizowane przez BaseCucumberTest").isNotNull();
     }
 
     @Given("a new order with ID {string}, amount {bigdecimal} and currency {string}")
     public void a_new_order_with_id_amount_and_currency(String orderId, BigDecimal amount, String currency) {
         this.currentOrderId = UUID.fromString(orderId);
-        dbSteps.givenOrderInDatabase(currentOrderId, amount.setScale(2, RoundingMode.HALF_UP), currency);
+        BaseCucumberTest.dbSteps.givenOrderInDatabase(currentOrderId, amount.setScale(2, RoundingMode.HALF_UP), currency);
         createdOrderIds.add(currentOrderId.toString());
         log.info("Order inserted into DB via DatabaseSteps: ID={}, Amount={}, Currency={}", currentOrderId, amount, currency);
     }
@@ -43,10 +43,12 @@ public class OrderProcessingStepDefinitions {
     @Then("a message should appear in the {string} queue within {int} seconds")
     public void a_message_should_appear_in_the_queue_within_seconds(String queue, Integer seconds) {
         log.info("THEN: Expecting message in queue '{}' within {}s", queue, seconds);
-        String rawMessage = mqSteps.waitForMessage(Duration.ofSeconds(seconds));
+        String usedQueueName = queue.isEmpty() ? BaseCucumberTest.queueName : queue;
+
+        String rawMessage = BaseCucumberTest.mqSteps.waitForMessage(Duration.ofSeconds(seconds));
 
         assertThat(rawMessage)
-                .as("Received message should not be null or empty from queue '%s'", queue)
+                .as("Received message should not be null or empty from queue '%s'", usedQueueName)
                 .isNotNull()
                 .isNotEmpty();
 
@@ -122,7 +124,7 @@ public class OrderProcessingStepDefinitions {
         log.info("Verifying order {} details in database based on original amount {}.",
                 orderIdStr, originalAmount);
 
-        dbSteps.thenOrderShouldHaveVatAndTotalAmountsInDatabase(
+        BaseCucumberTest.dbSteps.thenOrderShouldHaveVatAndTotalAmountsInDatabase(
                 UUID.fromString(orderIdStr), originalAmount
         );
         log.info("Order {} successfully verified in database using calculated amounts.", orderIdStr);
@@ -135,7 +137,7 @@ public class OrderProcessingStepDefinitions {
             UUID parsedOrderId = UUID.fromString(orderIdStr);
             this.currentOrderId = parsedOrderId;
 
-            dbSteps.givenOrderInDatabase(parsedOrderId, amount.setScale(2, RoundingMode.HALF_UP), currency);
+            BaseCucumberTest.dbSteps.givenOrderInDatabase(parsedOrderId, amount.setScale(2, RoundingMode.HALF_UP), currency);
             createdOrderIds.add(orderIdStr);
         } catch (IllegalArgumentException e) {
             caughtException = e;
@@ -156,7 +158,7 @@ public class OrderProcessingStepDefinitions {
 
     @Given("a clean environment for order processing")
     public void a_clean_environment_for_order_processing() {
-        log.info("Clean environment preparation is handled by BaseCucumberTest @BeforeAll or specific hooks.");
+        log.info("Clean environment preparation is handled by BaseCucumberTest @BeforeAll/@Before.");
     }
 
     @When("the order is processed by the system")
@@ -166,21 +168,20 @@ public class OrderProcessingStepDefinitions {
 
     @After
     public void cleanUpAfterScenario() {
-        log.info("--- @After (Cucumber): Starting scenario cleanup ---");
+        log.info("--- @After (OrderProcessingStepDefinitions): Starting scenario cleanup ---");
         try {
             if (!createdOrderIds.isEmpty()) {
                 log.info("Database cleanup: Deleting order records with IDs: {}", createdOrderIds);
-                dbSteps.deleteOrdersByIds(createdOrderIds);
+                BaseCucumberTest.dbSteps.deleteOrdersByIds(createdOrderIds);
                 createdOrderIds.clear();
             } else {
                 log.info("Database cleanup: No order IDs to delete in this scenario.");
             }
 
-            // Czyszczenie kolejki RabbitMQ - odpuszczam sobie implementacje czyszczenia pojedynczych kolejek - K.G.
-            log.info("RabbitMQ cleanup: Purging queue '{}' of any remaining messages...", queueName);
-            mqSteps.purgeQueue();
+            log.info("RabbitMQ cleanup: Purging queue '{}' of any remaining messages...", BaseCucumberTest.queueName);
+            BaseCucumberTest.mqSteps.purgeQueue();
 
-            log.info("--- @After (Cucumber): Scenario cleanup completed successfully. ---");
+            log.info("--- @After (OrderProcessingStepDefinitions): Scenario cleanup completed successfully. ---");
         } catch (Exception e) {
             log.error("Error during scenario cleanup: {}", e.getMessage(), e);
         }

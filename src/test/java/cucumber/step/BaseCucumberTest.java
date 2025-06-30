@@ -16,23 +16,18 @@ import common.DatabaseSteps;
 import common.RabbitMqSteps;
 
 
-// Klasa BaseCucumberTest pozostaje jako główna konfiguracja i baza
 public class BaseCucumberTest {
 
     private static final Logger log = LoggerFactory.getLogger(BaseCucumberTest.class);
 
-    static TestcontainersEnvironment testcontainersEnvironment;
+    public static TestcontainersEnvironment testcontainersEnvironment;
     private static OrderRepository repo;
-    static RabbitMqClient rmqClient;
-    static String queueName;
+    public static RabbitMqClient rmqClient;
+    public static String queueName;
 
-    // Zmieniamy public static na protected static.
-    // Dzięki temu będą dostępne dla klas dziedziczących bez kwalifikowania nazwą klasy (BaseCucumberTest.dbSteps)
-    // ale nadal będą statyczne (czyli jedna instancja dla wszystkich testów).
-    protected static DatabaseSteps dbSteps;
-    protected static RabbitMqSteps mqSteps;
+    public static DatabaseSteps dbSteps;
+    public static RabbitMqSteps mqSteps;
 
-    //Worker testowy
     public static Thread workerThread;
     public static OrderWorker worker;
 
@@ -43,19 +38,15 @@ public class BaseCucumberTest {
         testcontainersEnvironment = new TestcontainersEnvironment();
         testcontainersEnvironment.initOnce();
 
-        // Inicjalizacja repo i klienta RabbitMQ
         repo = new OrderRepository(testcontainersEnvironment.getDslContext());
         rmqClient = new RabbitMqClient(testcontainersEnvironment.getRabbitMqConnectionFactory());
 
-        // Pobranie nazwy kolejki
         queueName = testcontainersEnvironment.getTestProperties().getProperty("app.queue.name");
         rmqClient.connectAndDeclareQueue(queueName);
 
-        // Inicjalizacja klas kroków z zależnościami
         dbSteps = new DatabaseSteps(repo);
         mqSteps = new RabbitMqSteps(rmqClient, queueName);
 
-        // Uruchomienie workera
         worker = new OrderWorker(repo, rmqClient, queueName);
         workerThread = new Thread(worker, "test-order-worker-thread");
         workerThread.start();
@@ -66,8 +57,8 @@ public class BaseCucumberTest {
     @Before
     public void beforeScenario(Scenario scenario) {
         log.info("--- Cucumber @Before: Rozpoczynam scenariusz: {} ---", scenario.getName());
-        dbSteps.truncateOrdersTable(); // Używamy metody truncate z DatabaseSteps
-        mqSteps.purgeQueue(); // Używamy metody purge z RabbitMqSteps
+        dbSteps.truncateOrdersTable();
+        mqSteps.purgeQueue();
         log.info("--- Cucumber @Before: Środowisko wyczyszczone przed scenariuszem. ---");
     }
 
@@ -80,7 +71,7 @@ public class BaseCucumberTest {
         }
         if (workerThread != null && workerThread.isAlive()) {
             try {
-                workerThread.join(5000); // Czekaj na zakończenie workera
+                workerThread.join(5000);
                 if (workerThread.isAlive()) {
                     workerThread.interrupt();
                     log.warn("Wątek workera nie zakończył się poprawnie, wymuszam przerwanie.");
