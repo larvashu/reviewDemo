@@ -37,4 +37,4 @@ Użyte liby:
 - jooq ("for science", używam pierwszy raz)
 - testcontainers (używam pierwszy raz)
 
-### UWAGA: NIE ZADBAŁEM O RAPORTY ALLURE ORAZ O RÓWNOLEGŁE URUCHAMIANIE TESTÓW
+### Potencjalne TODO: reporty allure oraz równoległe uruchamianie testów
