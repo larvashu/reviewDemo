@@ -1,0 +1,44 @@
+testCases:
+  - Description: "defaultValues"
+    Data:
+      order:
+        amount: 100.00
+        currency: PLN
+    Expected:
+      calculation:
+        vat_rate: 0.23
+      order_result:
+        vat_amount: 23.00
+        total: 123.00
+      status:
+
+  - Description: "TC 1 - Specific amount and currency, custom VAT/Total"
+    Data:
+      order:
+        amount: 200.00
+        currency: PLN
+    Expected:
+      order_result:
+        vat_amount: 46.00
+        total: 246.00
+
+  - Description: "TC 2 - Edge case: 10.90 PLN"
+    Data:
+      order:
+        amount: 10.90
+        currency: PLN
+    Expected:
+      order_result:
+        vat_amount: 2.51
+        total: 13.41
+
+  - Description: "TC 3 - Edge case: 10.87 PLN"
+    Data:
+      order:
+        amount: 10.87
+        currency: PLN
+    Expected:
+      order_result:
+        vat_amount: 2.50
+        total: 13.37
+

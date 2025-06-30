@@ -1,4 +1,4 @@
-package junit.utils;
+package junit.utils.testData;
 
 import java.util.Map;
 import java.util.Optional;

@@ -1,6 +1,7 @@
 package junit;
 
 import app.model.Order;
+import junit.utils.testData.adnotations.TestData;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -11,8 +12,10 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
+import static java.math.RoundingMode.HALF_UP;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -35,7 +38,7 @@ public class OrderProcessingTest extends BaseJUnitTest {
     void shouldSendNewOrderMessageToQueue()  {
         log.info("--- TEST: shouldSendNewOrderMessageToQueue START ---");
         UUID id = UUID.randomUUID();
-        BigDecimal amount = new BigDecimal("100.00").setScale(2, RoundingMode.HALF_UP);
+        BigDecimal amount = new BigDecimal("100.00").setScale(2, HALF_UP);
         String currency = "PLN";
 
         // GIVEN: Wstawiamy zamówienie do bazy
@@ -52,34 +55,23 @@ public class OrderProcessingTest extends BaseJUnitTest {
 
 
     @ParameterizedTest
-    @CsvSource({
-            "150.00,EUR,34.50,184.50",
-            "75.25,GBP,17.31,92.56",
-            "0.00,USD,0.00,0.00",
-            "10.90,PLN,2.51,13.41",
-            "10.87,PLN,2.50,13.37",
-            "10.86,PLN,2.50,13.36",
-            "4.34,PLN,1.00,5.34",
-            "4.35,PLN,1.00,5.35"
-    })
+    @TestData("junit_testCases/orders.yaml")
     @DisplayName("Powinien przetwarzać zamówienia z różnymi kwotami i walutami, weryfikując VAT i Total")
-    void shouldProcessVariousOrdersWithCalculations(String amountStr, String currency, String expectedVatStr, String expectedTotalStr) throws Exception {
-        log.info("--- PARAMETERIZED TEST: shouldProcessVariousOrdersWithCalculations START for amount={}, currency={} ---", amountStr, currency);
-        UUID id = UUID.randomUUID();
-        BigDecimal amount = new BigDecimal(amountStr).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal expectedVat = new BigDecimal(expectedVatStr).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal expectedTotal = new BigDecimal(expectedTotalStr).setScale(2, RoundingMode.HALF_UP);
+    void shouldProcessOrders(Map<String, Object> data, Map<String, Object> expected) {
+        var orderData = (Map<String, ?>) data.get("order");
+        var result    = (Map<String, ?>) expected.get("order_result");
+        var id        = UUID.randomUUID();
+        var amount    = new BigDecimal(orderData.get("amount").toString()).setScale(2, HALF_UP);
+        var currency  = orderData.get("currency").toString();
+        var vat       = new BigDecimal(result.get("vat_amount").toString()).setScale(2, HALF_UP);
+        var total     = new BigDecimal(result.get("total").toString()).setScale(2, HALF_UP);
 
-        Order orderToInsert = dbSteps.givenOrderInDatabase(id, amount, currency);
+        dbSteps.givenOrderInDatabase(id, amount, currency);
         orderIdsToClean.add(id.toString());
 
-        // WHEN: Oczekujemy wiadomości w kolejce
-        String msg = mqSteps.waitForMessage(defaultMessageTimeout);
-
-        mqSteps.assertProcessedOrder(msg, id.toString(), amount, currency, expectedVat, expectedTotal);
-        dbSteps.thenOrderShouldHaveVatAndTotalAmountsInDatabase(id, amount, expectedVat, expectedTotal);
-
-        log.info("--- PARAMETERIZED TEST: shouldProcessVariousOrdersWithCalculations END ---");
+        var message = mqSteps.waitForMessage(defaultMessageTimeout);
+        mqSteps.assertProcessedOrder(message, id.toString(), amount, currency, vat, total);
+        dbSteps.thenOrderShouldHaveVatAndTotalAmountsInDatabase(id, amount, vat, total);
     }
 
     @Test
@@ -88,7 +80,7 @@ public class OrderProcessingTest extends BaseJUnitTest {
         log.info("--- TEST: shouldRejectNegativeAmount START ---");
 
         UUID id = UUID.randomUUID();
-        BigDecimal neg = new BigDecimal("-10.00").setScale(2, RoundingMode.HALF_UP);
+        BigDecimal neg = new BigDecimal("-10.00").setScale(2, HALF_UP);
         String currency = "PLN";
 
         log.info("Test: Próba wstawienia zamówienia z negatywną kwotą: {} {}", neg, currency);
